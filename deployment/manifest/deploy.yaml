@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lifesub-web-config
+  namespace: dg0413-lifesub-ns
+data:
+  runtime-env.js: |
+    window.__runtime_config__ = {
+      MEMBER_URL: 'http://dg0413.20.249.191.180.nip.io/api/auth',
+      MYSUB_URL: 'http://dg0413.20.249.191.180.nip.io/api/mysub',
+      RECOMMEND_URL: 'http://dg0413.20.249.191.180.nip.io/api/recommend'
+    };
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lifesub-web
+  namespace: dg0413-lifesub-ns
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lifesub-web
+  template:
+    metadata:
+      labels:
+        app: lifesub-web
+    spec:
+      imagePullSecrets:
+      - name: acr-secret
+      containers:
+      - name: lifesub-web
+        image: dg0413cr.azurecr.io/dg0413/lifesub-web:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 18080
+        volumeMounts:
+        - name: config-volume
+          mountPath: /usr/share/nginx/html/runtime-env.js
+          subPath: runtime-env.js
+        resources:
+          requests:
+            cpu: 256m
+            memory: 256Mi
+          limits:
+            cpu: 1024m
+            memory: 1024Mi
+      volumes:
+      - name: config-volume
+        configMap:
+          name: lifesub-web-config
+          
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: lifesub-web
+  namespace: dg0413-lifesub-ns
+spec:
+  selector:
+    app: lifesub-web
+  ports:
+  - port: 80
+    targetPort: 18080
+    protocol: TCP
+  type: ClusterIP
+  
+---  
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lifesub-web-ingress
+  namespace: dg0413-lifesub-ns
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: dg0413-web.20.214.212.222.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lifesub-web
+            port:
+              number: 80
+
